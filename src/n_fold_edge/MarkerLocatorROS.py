@@ -49,7 +49,7 @@ class CameraDriver:
 		self.processed_frame = self.current_frame
 		frame_gray = self.current_frame
 		self.processed_frame = cv2.cvtColor(self.current_frame, cv2.cv.CV_GRAY2BGR)
-		
+
 		# Previous marker location is unknown, search in the entire image.
 		self.current_frame = self.tracker.locate_marker(frame_gray)
 		self.location = self.tracker.pose
@@ -145,7 +145,7 @@ class marker_locator_node():
 		rospy.Subscriber(markerimage_sub_topic, Image, self.on_new_image)
 
 		# call updater routine
-		self.updater()  
+		self.updater()
 
 	def on_new_image(self, msg):
 		self.cd.current_frame = self.bridge.imgmsg_to_cv2(msg, "8UC1")
@@ -179,5 +179,3 @@ if __name__ == '__main__':
 		marker_locator_node()
 	except rospy.ROSInterruptException:
 		pass
-
-

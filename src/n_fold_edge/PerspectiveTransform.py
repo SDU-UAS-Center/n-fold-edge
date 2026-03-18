@@ -5,10 +5,12 @@ Created on Wed Feb 13 20:35:04 2013
 @author: Henrik Skov Midtiby
 """
 
+import math
+
 import cv2
 import numpy as np
-import math
-from MarkerPose import MarkerPose
+
+from .MarkerPose import MarkerPose
 
 
 # Inspired by this post on stackoverflow
@@ -17,20 +19,20 @@ class PerspectiveCorrecter:
     def __init__(self, imageCoordinates, worldCoordinates):
         src = np.array(imageCoordinates, np.float32)
         dst = np.array(worldCoordinates, np.float32)
-        self.transformMatrix = cv2.getPerspectiveTransform(src,dst)
-        
+        self.transformMatrix = cv2.getPerspectiveTransform(src, dst)
+
     def convert(self, coordinate):
         newcoordinate = np.array([coordinate[0], coordinate[1], 1], np.float32)
         temp = np.dot(self.transformMatrix, newcoordinate)
-        temp = temp * 1/temp[2]
+        temp = temp * 1 / temp[2]
         return [temp[0], temp[1]]
-        
+
     def convertPose(self, pose):
-        # Idea is to take the input pose and convert it to two points, the 
-        # location and a director. These two points are then perspective 
-        # corrected and the transformed orientation can then be determined 
+        # Idea is to take the input pose and convert it to two points, the
+        # location and a director. These two points are then perspective
+        # corrected and the transformed orientation can then be determined
         # from the two points.
-        location = [pose.x, pose.y]      
+        location = [pose.x, pose.y]
         orientation = pose.theta
         dist = 10
         dx = dist * math.cos(orientation)
@@ -43,6 +45,7 @@ class PerspectiveCorrecter:
         orient = math.atan2(dy, dx)
         return MarkerPose(loc1[0], loc1[1], orient, pose.quality, pose.order)
 
+
 def main():
     pointLocationsInImage = [[197, 136], [168, 403], [449, 169], [420, 347]]
     realCoordinates = [[0, 0], [0, 4], [6, 0], [6, 4]]
@@ -54,6 +57,7 @@ def main():
     perspectiveConverter = PerspectiveCorrecter(pointLocationsInImage, realCoordinates)
     pose = perspectiveConverter.convertPose(MarkerPose(50, 120, 10, 0.2))
     print("%8.3f %8.3f %8.3f %8.3f" % (pose.x, pose.y, pose.theta, pose.quality))
-        
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     main()

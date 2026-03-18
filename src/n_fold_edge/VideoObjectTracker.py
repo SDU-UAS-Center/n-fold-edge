@@ -8,7 +8,7 @@ Date: 2015-11-14
 
 import argparse
 import cv2
-import MarkerTracker
+import .MarkerTracker
 import math
 
 

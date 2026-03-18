@@ -1,21 +1,22 @@
 #!/usr/bin/env python
-from time import time, strftime
+import math
 import os
 
 # sys.path.append('/opt/ros/indigo/lib/python2.7/dist-packages')
 # need to run the following line before running the script in ros mode
 # source /opt/ros/indigo/setup.bash
-
 # python imports
 import signal
+from time import strftime, time
+
 import cv2
-import math
 import numpy as np
 
+from .MarkerPose import MarkerPose
+from .MarkerTracker import MarkerTracker
+
 # application imports
-from PerspectiveTransform import PerspectiveCorrecter
-from MarkerPose import MarkerPose
-from MarkerTracker import MarkerTracker
+from .PerspectiveTransform import PerspectiveCorrecter
 
 # parameters
 print_debug_messages = False
@@ -23,7 +24,7 @@ show_image = True
 list_of_markers_to_find = [4, 5]
 get_images_to_flush_cam_buffer = 5
 publish_to_ros = False
-markerpose_ros_topic = '/markerlocator/markerpose'
+markerpose_ros_topic = "/markerlocator/markerpose"
 
 # global variables
 stop_flag = False
@@ -31,6 +32,7 @@ stop_flag = False
 if publish_to_ros:
     import rospy
     from markerlocator.msg import markerpose
+
     markerpose_msg = markerpose()
 
 
@@ -39,20 +41,21 @@ def signal_handler(signal, frame):
     global stop_flag
     stop_flag = True
 
+
 # install ctrl-c handler
 signal.signal(signal.SIGINT, signal_handler)
 
 
 def set_camera_focus():
     # Disable autofocus
-    os.system('v4l2-ctl -d 1 -c focus_auto=0')
+    os.system("v4l2-ctl -d 1 -c focus_auto=0")
 
     # Set focus to a specific value. High values for nearby objects and
     # low values for distant objects.
-    os.system('v4l2-ctl -d 1 -c focus_absolute=0')
+    os.system("v4l2-ctl -d 1 -c focus_absolute=0")
 
     # sharpness (int)    : min=0 max=255 step=1 default=128 value=128
-    os.system('v4l2-ctl -d 1 -c sharpness=200')
+    os.system("v4l2-ctl -d 1 -c sharpness=200")
 
 
 class CameraDriver:
@@ -61,11 +64,17 @@ class CameraDriver:
     images to a different class.
     """
 
-    def __init__(self, marker_orders=[6], default_kernel_size=21, scaling_parameter=2500, downscale_factor=1):
+    def __init__(
+        self,
+        marker_orders=[6],
+        default_kernel_size=21,
+        scaling_parameter=2500,
+        downscale_factor=1,
+    ):
         # Initialize camera driver.
         # Open output window.
         if show_image is True:
-            cv2.namedWindow('filterdemo', cv2.WINDOW_AUTOSIZE)
+            cv2.namedWindow("filterdemo", cv2.WINDOW_AUTOSIZE)
 
         # Select the camera where the images should be grabbed from.
         set_camera_focus()
@@ -102,7 +111,12 @@ class CameraDriver:
         self.processed_frame = self.current_frame
         # Locate all markers in image.
         frame_gray = cv2.cvtColor(self.current_frame, cv2.COLOR_RGB2GRAY)
-        reduced_image = cv2.resize(frame_gray, (0, 0), fx=1.0/self.downscale_factor, fy=1.0 / self.downscale_factor)
+        reduced_image = cv2.resize(
+            frame_gray,
+            (0, 0),
+            fx=1.0 / self.downscale_factor,
+            fy=1.0 / self.downscale_factor,
+        )
         for k in range(len(self.trackers)):
             # Previous marker location is unknown, search in the entire image.
             self.current_frame = self.trackers[k].locate_marker(reduced_image)
@@ -125,7 +139,7 @@ class CameraDriver:
 
     def show_processed_frame(self):
         if show_image is True:
-            cv2.imshow('filterdemo', self.processed_frame)
+            cv2.imshow("filterdemo", self.processed_frame)
 
     def reset_all_locations(self):
         # Reset all markers locations, forcing a full search on the next iteration.
@@ -137,7 +151,7 @@ class CameraDriver:
             # Listen for keyboard events and take relevant actions.
             key = cv2.waitKey(100)
             # Discard higher order bit, http://permalink.gmane.org/gmane.comp.lib.opencv.devel/410
-            key = key & 0xff
+            key = key & 0xFF
             if key == 27:  # Esc
                 self.running = False
             if key == 114:  # R
@@ -159,8 +173,10 @@ class RosPublisher:
         # Instantiate ros publisher with information about the markers that
         # will be tracked.
         self.markers = markers
-        self.markerpose_pub = rospy.Publisher(markerpose_ros_topic, markerpose, queue_size=0)
-        rospy.init_node('MarkerLocator')
+        self.markerpose_pub = rospy.Publisher(
+            markerpose_ros_topic, markerpose, queue_size=0
+        )
+        rospy.init_node("MarkerLocator")
 
     def publish_marker_locations(self, locations):
         markerpose_msg.header.stamp = rospy.get_rostime()
@@ -178,19 +194,35 @@ class RosPublisher:
 
 
 def main():
-
     if publish_to_ros:
         ros_publisher = RosPublisher(list_of_markers_to_find, markerpose_ros_topic)
 
-    cd = CameraDriver(list_of_markers_to_find, default_kernel_size=55, scaling_parameter=1000, downscale_factor=1)  # Best in robolab.
+    cd = CameraDriver(
+        list_of_markers_to_find,
+        default_kernel_size=55,
+        scaling_parameter=1000,
+        downscale_factor=1,
+    )  # Best in robolab.
     # cd = ImageDriver(list_of_markers_to_find, defaultKernelSize = 21)
     t0 = time()
 
     # Calibration of setup in robolab, so that the coordinates correspond to real world coordinates.
-    reference_point_locations_in_image = [[1328, 340], [874, 346], [856, 756], [1300, 762]]
-    reference_point_locations_in_world_coordinates = [[0, 0], [300, 0], [300, 250], [0, 250]]
-    perspective_corrector = PerspectiveCorrecter(reference_point_locations_in_image,
-                                                 reference_point_locations_in_world_coordinates)
+    reference_point_locations_in_image = [
+        [1328, 340],
+        [874, 346],
+        [856, 756],
+        [1300, 762],
+    ]
+    reference_point_locations_in_world_coordinates = [
+        [0, 0],
+        [300, 0],
+        [300, 250],
+        [0, 250],
+    ]
+    perspective_corrector = PerspectiveCorrecter(
+        reference_point_locations_in_image,
+        reference_point_locations_in_world_coordinates,
+    )
 
     while cd.running and stop_flag is False:
         (t1, t0) = (t0, time())
@@ -209,11 +241,16 @@ def main():
                 try:
                     # pose_corrected = perspective_corrector.convertPose(y[k])
                     pose_corrected = y[k]
-                    print("%8.3f %8.3f %8.3f %8.3f %s" % (pose_corrected.x,
-                                                          pose_corrected.y,
-                                                          pose_corrected.theta,
-                                                          pose_corrected.quality,
-                                                          pose_corrected.order))
+                    print(
+                        "%8.3f %8.3f %8.3f %8.3f %s"
+                        % (
+                            pose_corrected.x,
+                            pose_corrected.y,
+                            pose_corrected.theta,
+                            pose_corrected.quality,
+                            pose_corrected.order,
+                        )
+                    )
                 except Exception as e:
                     print("%s" % e)
 

@@ -1,26 +1,31 @@
 #!/usr/bin/env python
 
-import rospy
-from sensor_msgs.msg import Image
+import os
+
 import cv2
 import numpy as np
+import rospy
 from cv_bridge import CvBridge, CvBridgeError
-import os
+from sensor_msgs.msg import Image
+
 
 def set_camera_focus(device):
     # Disable autofocus
-    os.system('v4l2-ctl -d %d -c focus_auto=0' % device)
+    os.system("v4l2-ctl -d %d -c focus_auto=0" % device)
 
     # Set focus to a specific value. High values for nearby objects and
     # low values for distant objects.
-    os.system('v4l2-ctl -d %d -c focus_absolute=0' % device)
+    os.system("v4l2-ctl -d %d -c focus_absolute=0" % device)
 
     # sharpness (int)    : min=0 max=255 step=1 default=128 value=128
-    os.system('v4l2-ctl -d %d -c sharpness=200' % device)
+    os.system("v4l2-ctl -d %d -c sharpness=200" % device)
+
 
 def webcam_pub():
-    rospy.init_node('webcam_pub', anonymous=True)
-    markerimage_pub_topic = rospy.get_param("~markerimage_pub",'/markerlocator/image_raw')
+    rospy.init_node("webcam_pub", anonymous=True)
+    markerimage_pub_topic = rospy.get_param(
+        "~markerimage_pub", "/markerlocator/image_raw"
+    )
     pub = rospy.Publisher(markerimage_pub_topic, Image, queue_size=0)
     camera_width = rospy.get_param("~camera_width", 1920)
     camera_height = rospy.get_param("~camera_height", 1080)
@@ -42,15 +47,20 @@ def webcam_pub():
     bridge = CvBridge()
 
     if not cam.isOpened():
-         print("Webcam is not available")
-         return -1
+        print("Webcam is not available")
+        return -1
 
     count = 0
     while not rospy.is_shutdown():
         (grabbed, frame) = cam.read()
         if count % skip_images == 0:
             time_captured = rospy.Time.now()
-            frame = cv2.resize(frame, (0, 0), fx=1.0/image_downscale_factor, fy=1.0/image_downscale_factor)
+            frame = cv2.resize(
+                frame,
+                (0, 0),
+                fx=1.0 / image_downscale_factor,
+                fy=1.0 / image_downscale_factor,
+            )
             # frame_gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             frame_gray = cv2.cvtColor(frame, cv2.cv.CV_RGB2GRAY)
             msg = bridge.cv2_to_imgmsg(frame_gray, encoding="8UC1")
@@ -59,7 +69,8 @@ def webcam_pub():
         count += 1
         rate.sleep()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         webcam_pub()
     except rospy.ROSInterruptException:

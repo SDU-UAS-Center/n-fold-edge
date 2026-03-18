@@ -7,7 +7,7 @@ Window mode marker tracker.
 from MarkerTracker import MarkerTracker
 import math
 import cv2
-from MarkerPose import MarkerPose
+from .MarkerPose import MarkerPose
 import numpy as np
 import sys
 
@@ -49,7 +49,7 @@ class TrackerInWindowMode:
             print("frameGray: ", self.frameGray.shape[0], self.frameGray.shape[1], self.frameGray.dtype)
             print "Unexpected error:", sys.exc_info()[0]
             pass
-        
+
     def locate_marker(self):
         (xm, ym) = self.markerTracker.locate_marker(self.frameGray)
 
@@ -66,6 +66,6 @@ class TrackerInWindowMode:
         ym = ym + self.subImagePosition[1]
 
         return MarkerPose(xm, ym, orientation, self.markerTracker.quality, self.markerTracker.order)
-        
+
     def show_cropped_image(self):
         pass
