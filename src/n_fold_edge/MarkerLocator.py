@@ -125,8 +125,8 @@ class CameraDriver:
 
     def draw_detected_markers(self):
         for k in range(len(self.trackers)):
-            xm = self.old_locations[k].x
-            ym = self.old_locations[k].y
+            xm = int(self.old_locations[k].x)
+            ym = int(self.old_locations[k].y)
             orientation = self.old_locations[k].theta
             if self.old_locations[k].quality < 0.9:
                 cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 1)
@@ -255,6 +255,3 @@ def main():
                     print("%s" % e)
 
     print("Stopping")
-
-
-main()
