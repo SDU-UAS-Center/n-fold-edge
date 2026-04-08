@@ -1,39 +1,21 @@
-#!/usr/bin/env python
 import math
 import os
-
-# sys.path.append('/opt/ros/indigo/lib/python2.7/dist-packages')
-# need to run the following line before running the script in ros mode
-# source /opt/ros/indigo/setup.bash
-# python imports
 import signal
 from time import strftime, time
 
 import cv2
-import numpy as np
 
 from .MarkerPose import MarkerPose
 from .MarkerTracker import MarkerTracker
-
-# application imports
-from .PerspectiveTransform import PerspectiveCorrecter
 
 # parameters
 print_debug_messages = False
 show_image = True
 list_of_markers_to_find = [4, 5]
 get_images_to_flush_cam_buffer = 5
-publish_to_ros = False
-markerpose_ros_topic = "/markerlocator/markerpose"
 
 # global variables
 stop_flag = False
-
-if publish_to_ros:
-    import rospy
-    from markerlocator.msg import markerpose
-
-    markerpose_msg = markerpose()
 
 
 # define ctrl-c handler
@@ -168,35 +150,7 @@ class CameraDriver:
         return self.old_locations
 
 
-class RosPublisher:
-    def __init__(self, markers, markerpose_ros_topic):
-        # Instantiate ros publisher with information about the markers that
-        # will be tracked.
-        self.markers = markers
-        self.markerpose_pub = rospy.Publisher(
-            markerpose_ros_topic, markerpose, queue_size=0
-        )
-        rospy.init_node("MarkerLocator")
-
-    def publish_marker_locations(self, locations):
-        markerpose_msg.header.stamp = rospy.get_rostime()
-        j = 0
-        for i in self.markers:
-            # print 'x%i %i  y%i %i  o%i %i' % (i, locations[j].x, i, locations[j].y, i, locations[j].theta)
-            # ros function
-            markerpose_msg.order = locations[j].order
-            markerpose_msg.x = locations[j].x
-            markerpose_msg.y = locations[j].y
-            markerpose_msg.theta = locations[j].theta
-            markerpose_msg.quality = locations[j].quality
-            self.markerpose_pub.publish(markerpose_msg)
-            j += 1
-
-
 def main():
-    if publish_to_ros:
-        ros_publisher = RosPublisher(list_of_markers_to_find, markerpose_ros_topic)
-
     cd = CameraDriver(
         list_of_markers_to_find,
         default_kernel_size=55,
@@ -205,24 +159,6 @@ def main():
     )  # Best in robolab.
     # cd = ImageDriver(list_of_markers_to_find, defaultKernelSize = 21)
     t0 = time()
-
-    # Calibration of setup in robolab, so that the coordinates correspond to real world coordinates.
-    reference_point_locations_in_image = [
-        [1328, 340],
-        [874, 346],
-        [856, 756],
-        [1300, 762],
-    ]
-    reference_point_locations_in_world_coordinates = [
-        [0, 0],
-        [300, 0],
-        [300, 250],
-        [0, 250],
-    ]
-    perspective_corrector = PerspectiveCorrecter(
-        reference_point_locations_in_image,
-        reference_point_locations_in_world_coordinates,
-    )
 
     while cd.running and stop_flag is False:
         (t1, t0) = (t0, time())
@@ -234,24 +170,21 @@ def main():
         cd.show_processed_frame()
         cd.handle_keyboard_events()
         y = cd.return_positions()
-        if publish_to_ros:
-            ros_publisher.publish_marker_locations(y)
-        else:
-            for k in range(len(y)):
-                try:
-                    # pose_corrected = perspective_corrector.convertPose(y[k])
-                    pose_corrected = y[k]
-                    print(
-                        "%8.3f %8.3f %8.3f %8.3f %s"
-                        % (
-                            pose_corrected.x,
-                            pose_corrected.y,
-                            pose_corrected.theta,
-                            pose_corrected.quality,
-                            pose_corrected.order,
-                        )
+        for k in range(len(y)):
+            try:
+                # pose_corrected = perspective_corrector.convertPose(y[k])
+                pose_corrected = y[k]
+                print(
+                    "%8.3f %8.3f %8.3f %8.3f %s"
+                    % (
+                        pose_corrected.x,
+                        pose_corrected.y,
+                        pose_corrected.theta,
+                        pose_corrected.quality,
+                        pose_corrected.order,
                     )
-                except Exception as e:
-                    print("%s" % e)
+                )
+            except Exception as e:
+                print("%s" % e)
 
     print("Stopping")
