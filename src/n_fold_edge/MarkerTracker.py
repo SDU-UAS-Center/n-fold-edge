@@ -158,12 +158,10 @@ class MarkerTracker:
                 if intensity > max_value:
                     max_value = intensity
                     max_orientation = orient
+            except IndexError:
+                pass
             except Exception as e:
-                print(
-                    "determineMarkerOrientation: error: %d %d %d %d"
-                    % (ym2, xm2, frame.shape[1], frame.shape[0])
-                )
-                print(e)
+                traceback.print_exception(e)
                 pass
 
         self.orientation = self.limit_angle_to_range(max_orientation)
@@ -183,6 +181,12 @@ class MarkerTracker:
 
         try:
             frame_img = self.extract_window_around_maker_location(frame)
+            if (
+                frame_img.shape != bright_regions.shape
+                or frame_img.shape != dark_regions.shape
+            ):
+                self.quality = 0.0
+                return
             (bright_mean, bright_std) = cv2.meanStdDev(frame_img, mask=bright_regions)
             (dark_mean, dark_std) = cv2.meanStdDev(frame_img, mask=dark_regions)
 
@@ -196,9 +200,7 @@ class MarkerTracker:
             )
             self.quality = temp_value_for_quality
         except Exception as e:
-            print("error")
-            print(e)
-            print(traceback.format_exc())
+            traceback.print_exception(e)
             self.quality = 0.0
             return
 
