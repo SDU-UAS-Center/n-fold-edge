@@ -186,9 +186,9 @@ class MarkerTracker:
             (bright_mean, bright_std) = cv2.meanStdDev(frame_img, mask=bright_regions)
             (dark_mean, dark_std) = cv2.meanStdDev(frame_img, mask=dark_regions)
 
-            mean_difference = bright_mean - dark_mean
-            normalised_mean_difference = mean_difference / (
-                0.5 * bright_std + 0.5 * dark_std
+            mean_difference = np.squeeze(bright_mean - dark_mean)
+            normalised_mean_difference = np.squeeze(
+                mean_difference / (0.5 * bright_std + 0.5 * dark_std)
             )
             # Ugly hack for translating the normalised_mean_differences to the range [0, 1]
             temp_value_for_quality = 1 - 1 / (
