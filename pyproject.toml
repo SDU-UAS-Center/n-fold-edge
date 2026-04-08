@@ -1,10 +1,15 @@
 [project]
 name = "n-fold-edge"
 version = "0.1.0"
-description = "Add your description here"
+description = "Marker detector using n-fold-edge on rotational symmetric patterns"
 readme = "README.md"
+license-files = ["LICEN[CS]E*"]
 authors = [
-    { name = "Henrik Dyrberg Egemose", email = "hde@mmmi.sdu.dk" }
+  { name="Henrik Skov Midtiby", email="hemi@mmmi.sdu.dk" },
+]
+maintainers = [
+  { name="Henrik Skov Midtiby", email="hemi@mmmi.sdu.dk" },
+  { name="Henrik Dyrberg Egemose", email="hde@mmmi.sdu.dk" },
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -17,3 +22,71 @@ n-fold-edge = "n_fold_edge:main"
 [build-system]
 requires = ["uv_build>=0.8.10,<0.9.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "icecream>=2.2.0",
+    "pre-commit>=4.5.1",
+]
+
+[tool.codespell]
+check-hidden = true
+skip = ".git,venv,*.c"
+ignore-words-list = "mor, FPR"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+fix = true
+extend-exclude = ["documentation", "patterns"]
+
+[tool.ruff.lint]
+select = [
+  "A",
+  "B",
+  "C4",
+  "D",
+  "E",
+  "F",
+  "I",
+  "PGH",
+  "PT",
+  "SIM",
+  "UP",
+]
+
+ignore = [
+  # Doc string format currently not used
+  "D205",
+  "D401",
+  # Use ternary operator instead of if/else
+  "SIM108",
+  # docstring ignores - conflicting rules
+  "D203",
+  "D212",
+  # as recommended by https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+  "D206",
+  "D300",
+  "E111",
+  "E114",
+  "E117",
+  "E501",
+  # still using D102 since docstring inherited is not supported in ruff"
+  "D102",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+  "D104",
+  "F401",
+  "F403",
+]
+"tests/*" = ["D"]
+"docs/*" = ["D"]
+"documentation/*" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.format]
+docstring-code-format = true

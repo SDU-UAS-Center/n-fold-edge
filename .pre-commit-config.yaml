@@ -1,0 +1,38 @@
+default_stages: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit, pre-push]
+fail_fast: false
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: check-ast
+            name: Validate Python
+          - id: trailing-whitespace
+          - id: mixed-line-ending
+          - id: end-of-file-fixer
+          - id: check-toml
+            name: Validate pyproject.toml
+
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.15.9
+      hooks:
+          - id: ruff
+            name: ruff lint
+            types_or: [python, pyi, pyproject]
+            args: [--exit-non-zero-on-fix]
+          - id: ruff-format
+            types: [python, pyi, pyproject]
+
+    - repo: https://github.com/codespell-project/codespell
+      rev: v2.4.2
+      hooks:
+          - id: codespell
+            files: ^.*\.(py|md|rst)$
+            additional_dependencies:
+                - tomli
+
+    - repo: https://github.com/pre-commit/mirrors-mypy
+      rev: v1.20.0
+      hooks:
+          - id: mypy
+            args: [--strict, --ignore-missing-imports]
