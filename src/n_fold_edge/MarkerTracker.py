@@ -54,7 +54,7 @@ class MarkerTracker:
             y = marker_location[0]
             frame_sum_squared_cutout = self.frame_sum_squared[x - delta : x + delta + 1, y - delta : y + delta + 1]
             # Taking the square root of the frame_sum_squared improves the accuracy of the
-            # refied marker position.
+            # refined marker position.
             frame_sum_squared_cutout = np.sqrt(frame_sum_squared_cutout)
             nx, ny = (1 + 2 * delta, 1 + 2 * delta)
             x = np.linspace(-delta, delta, nx)
@@ -62,12 +62,16 @@ class MarkerTracker:
             xv, yv = np.meshgrid(x, y)
             xv = xv.ravel()
             yv = yv.ravel()
-            coefficients = np.concatenate([[xv**2], [xv], [yv**2], [yv], [yv**0]], axis=0).transpose()
+            # a*xv^2 + b*xv + c*yv^2 + d*yv + e*xv*yv + f
+            coefficients = np.concatenate([[xv**2], [xv], [yv**2], [yv], [xv * yv], [yv**0]], axis=0).transpose()
             values = frame_sum_squared_cutout.ravel().reshape(-1, 1)
-            solution, residuals, rank, s = np.linalg.lstsq(coefficients, values, rcond=None)
-            dx = -solution[1] / (2 * solution[0])
-            dy = -solution[3] / (2 * solution[2])
-            return dx[0], dy[0]
+            solution, _, _, _ = np.linalg.lstsq(coefficients, values, rcond=None)
+            solution = solution.squeeze()
+            dx_init = -solution[1] / (2 * solution[0])
+            dy_init = -solution[3] / (2 * solution[2])
+            dx = -(solution[1] + solution[4] * dy_init) / (2 * solution[0])
+            dy = -(solution[3] + solution[4] * dx_init) / (2 * solution[2])
+            return dx, dy
         except np.linalg.LinAlgError:
             # This error is triggered when the marker is detected close to an edge.
             # In that case the refine method bails out and returns two zeros.
@@ -87,7 +91,6 @@ class MarkerTracker:
         orientation = self.determine_marker_orientation(frame, max_loc)
         quality = self.determine_marker_quality(frame, max_loc, orientation)
         dx, dy = self.refine_marker_location(max_loc)
-        # print(f"dx: {dx: 0.2f}  dy: {dy: 0.2f}")
         marker_location = (max_loc[0] + dx, max_loc[1] + dy)
         self.pose = MarkerPose(marker_location[0], marker_location[1], orientation, quality, self.order)
         return self.pose
