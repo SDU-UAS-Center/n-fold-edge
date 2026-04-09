@@ -1,192 +1,164 @@
-"""Main file for N-fold-edge."""
+"""Locate a marker of given order in image."""
 
 import math
-import os
-import signal
-from collections.abc import Iterable
-from time import strftime, time
-from typing import Any
+import traceback
+from collections.abc import Sequence
 
 import cv2
 import numpy as np
 
 from .MarkerPose import MarkerPose
-from .MarkerTracker import MarkerTracker
-
-# parameters
-print_debug_messages = False
-show_image = True
-list_of_markers_to_find = [4, 5]
-get_images_to_flush_cam_buffer = 5
-
-# global variables
-stop_flag = False
 
 
-# define ctrl-c handler
-def signal_handler(signal: int, frame: Any) -> None:
-    """Handle signal to terminate program."""
-    global stop_flag
-    stop_flag = True
+class MarkerLocator:
+    """Purpose: Locate a certain marker in an image."""
 
+    def __init__(self, order: int, kernel_size: int, scale_factor: float) -> None:
+        self.order = order
+        self.kernel_size = kernel_size
+        (kernel_real, kernel_imag) = self.generate_symmetry_detector_kernel(order, kernel_size)
+        self.mat_real = kernel_real / scale_factor
+        self.mat_imag = kernel_imag / scale_factor
+        self.frame_real: np.ndarray
+        self.frame_imag: np.ndarray
+        self.track_marker_with_missing_black_leg = True
+        # Create kernel used to remove arm in quality-measure
+        (kernel_remove_arm_real, kernel_remove_arm_imag) = self.generate_symmetry_detector_kernel(1, self.kernel_size)
+        self.kernelComplex = np.array(kernel_real + 1j * kernel_imag, dtype=complex)
+        self.KernelRemoveArmComplex = np.array(kernel_remove_arm_real + 1j * kernel_remove_arm_imag, dtype=complex)
+        # Values used in quality-measure
+        self.threshold = 0.4 * np.absolute(self.kernelComplex).max()
+        self.y1 = int(math.floor(float(self.kernel_size) / 2))
+        self.y2 = int(math.ceil(float(self.kernel_size) / 2))
+        self.x1 = int(math.floor(float(self.kernel_size) / 2))
+        self.x2 = int(math.ceil(float(self.kernel_size) / 2))
+        # Information about the located marker.
+        self.pose: MarkerPose
 
-# install ctrl-c handler
-signal.signal(signal.SIGINT, signal_handler)
+    @staticmethod
+    def generate_symmetry_detector_kernel(order: int, kernel_size: int) -> tuple[np.ndarray, np.ndarray]:
+        value_range = np.linspace(-1, 1, kernel_size)
+        temp1 = np.meshgrid(value_range, value_range)
+        kernel = temp1[0] + 1j * temp1[1]
+        magnitude = abs(kernel)
+        kernel = np.power(kernel, order)
+        kernel = kernel * np.exp(-8 * magnitude**2)
+        return np.real(kernel), np.imag(kernel)
 
+    def refine_marker_location(self, marker_location: Sequence[int]) -> tuple[float, float]:
+        try:
+            delta = 1
+            # Fit a parabola to the frame_sum_squared marker response
+            # and then locate the top of the parabola.
+            x = marker_location[1]
+            y = marker_location[0]
+            frame_sum_squared_cutout = self.frame_sum_squared[x - delta : x + delta + 1, y - delta : y + delta + 1]
+            # Taking the square root of the frame_sum_squared improves the accuracy of the
+            # refined marker position.
+            frame_sum_squared_cutout = np.sqrt(frame_sum_squared_cutout)
+            nx, ny = (1 + 2 * delta, 1 + 2 * delta)
+            x = np.linspace(-delta, delta, nx)
+            y = np.linspace(-delta, delta, ny)
+            xv, yv = np.meshgrid(x, y)
+            xv = xv.ravel()
+            yv = yv.ravel()
+            # a*xv^2 + b*xv + c*yv^2 + d*yv + e*xv*yv + f
+            coefficients = np.concatenate([[xv**2], [xv], [yv**2], [yv], [xv * yv], [yv**0]], axis=0).transpose()
+            values = frame_sum_squared_cutout.ravel().reshape(-1, 1)
+            solution, _, _, _ = np.linalg.lstsq(coefficients, values, rcond=None)
+            solution = solution.squeeze()
+            dx_init = -solution[1] / (2 * solution[0])
+            dy_init = -solution[3] / (2 * solution[2])
+            dx = -(solution[1] + solution[4] * dy_init) / (2 * solution[0])
+            dy = -(solution[3] + solution[4] * dx_init) / (2 * solution[2])
+            return dx, dy
+        except np.linalg.LinAlgError:
+            # This error is triggered when the marker is detected close to an edge.
+            # In that case the refine method bails out and returns two zeros.
+            return 0, 0
 
-def set_camera_focus() -> None:
-    """Set Camera Focus."""
-    # Disable autofocus
-    os.system("v4l2-ctl -d 1 -c focus_auto=0")
+    def locate_marker(self, frame: np.ndarray) -> MarkerPose:
+        assert len(frame.shape) == 2, "Input image is not a single channel image."
+        self.frame_real = frame.copy()
+        self.frame_imag = frame.copy()
+        # Calculate convolution and determine response strength.
+        self.frame_real = cv2.filter2D(self.frame_real, cv2.CV_32F, self.mat_real)
+        self.frame_imag = cv2.filter2D(self.frame_imag, cv2.CV_32F, self.mat_imag)
+        frame_real_squared = cv2.multiply(self.frame_real, self.frame_real, dtype=cv2.CV_32F)
+        frame_imag_squared = cv2.multiply(self.frame_imag, self.frame_imag, dtype=cv2.CV_32F)
+        self.frame_sum_squared = cv2.add(frame_real_squared, frame_imag_squared, dtype=cv2.CV_32F)
+        _, _, _, max_loc = cv2.minMaxLoc(self.frame_sum_squared)
+        orientation = self.determine_marker_orientation(frame, max_loc)
+        quality = self.determine_marker_quality(frame, max_loc, orientation)
+        dx, dy = self.refine_marker_location(max_loc)
+        marker_location = (max_loc[0] + dx, max_loc[1] + dy)
+        self.pose = MarkerPose(marker_location[0], marker_location[1], orientation, quality, self.order)
+        return self.pose
 
-    # Set focus to a specific value. High values for nearby objects and
-    # low values for distant objects.
-    os.system("v4l2-ctl -d 1 -c focus_absolute=0")
-
-    # sharpness (int)    : min=0 max=255 step=1 default=128 value=128
-    os.system("v4l2-ctl -d 1 -c sharpness=200")
-
-
-class CameraDriver:
-    """
-    Purpose: capture images from a camera and delegate processing of the
-    images to a different class.
-    """
-
-    def __init__(
-        self,
-        marker_orders: Iterable[int] = (6,),
-        default_kernel_size: int = 21,
-        scaling_parameter: float = 2500,
-        downscale_factor: float = 1,
-    ) -> None:
-        # Initialize camera driver.
-        # Open output window.
-        if show_image is True:
-            cv2.namedWindow("filterdemo", cv2.WINDOW_AUTOSIZE)
-
-        # Select the camera where the images should be grabbed from.
-        set_camera_focus()
-        self.camera = cv2.VideoCapture(0)
-        self.set_camera_resolution()
-
-        # Storage for image processing.
-        self.current_frame: np.ndarray
-        self.processed_frame: np.ndarray
-        self.running = True
-        self.downscale_factor = downscale_factor
-
-        # Storage for trackers.
-        self.trackers: list[MarkerTracker] = []
-        self.old_locations: list[MarkerPose] = []
-
-        # Initialize trackers.
-        for marker_order in marker_orders:
-            temp = MarkerTracker(marker_order, default_kernel_size, scaling_parameter)
-            temp.track_marker_with_missing_black_leg = False
-            self.trackers.append(temp)
-            self.old_locations.append(MarkerPose(0, 0, 0, 0, 0))
-
-    def set_camera_resolution(self) -> None:
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-
-    def get_image(self) -> None:
-        # Get image from camera.
-        for _ in range(get_images_to_flush_cam_buffer):
-            self.current_frame = self.camera.read()[1]
-
-    def process_frame(self) -> None:
-        self.processed_frame = self.current_frame
-        # Locate all markers in image.
-        frame_gray = cv2.cvtColor(self.current_frame, cv2.COLOR_RGB2GRAY)
-        reduced_image = cv2.resize(
-            frame_gray,
-            (0, 0),
-            fx=1.0 / self.downscale_factor,
-            fy=1.0 / self.downscale_factor,
-        )
-        for k in range(len(self.trackers)):
-            # Previous marker location is unknown, search in the entire image.
-            self.old_locations[k] = self.trackers[k].locate_marker(reduced_image)
-            self.old_locations[k].scale_position(self.downscale_factor)
-
-    def draw_detected_markers(self) -> None:
-        if self.processed_frame is not None:
-            for k in range(len(self.trackers)):
-                xm = int(self.old_locations[k].x)
-                ym = int(self.old_locations[k].y)
-                orientation = self.old_locations[k].theta
-                if self.old_locations[k].quality < 0.9:
-                    cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 1)
-                else:
-                    cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 3)
-
-                xm2 = int(xm + 50 * math.cos(orientation))
-                ym2 = int(ym + 50 * math.sin(orientation))
-                cv2.line(self.processed_frame, (xm, ym), (xm2, ym2), (255, 0, 0), 2)
-
-    def show_processed_frame(self) -> None:
-        if show_image is True and self.processed_frame is not None:
-            cv2.imshow("filterdemo", self.processed_frame)
-
-    def reset_all_locations(self) -> None:
-        # Reset all markers locations, forcing a full search on the next iteration.
-        for k in range(len(self.trackers)):
-            self.old_locations[k] = MarkerPose(0, 0, 0, 0, 0)
-
-    def handle_keyboard_events(self) -> None:
-        if show_image is True:
-            # Listen for keyboard events and take relevant actions.
-            key = cv2.waitKey(100)
-            # Discard higher order bit, http://permalink.gmane.org/gmane.comp.lib.opencv.devel/410
-            key = key & 0xFF
-            if key == 27:  # Esc
-                self.running = False
-            if key == 114:  # R
-                print("Resetting")
-                self.reset_all_locations()
-            if key == 115:  # S
-                # save image
-                print("Saving image")
-                filename = strftime("%Y-%m-%d %H-%M-%S")
-                if self.current_frame is not None:
-                    cv2.imwrite(f"output/{filename}.png", self.current_frame)
-
-    def return_positions(self) -> list[MarkerPose]:
-        # Return list of all marker locations.
-        return self.old_locations
-
-
-def main() -> None:
-    """Main function for running n-fold-edge on video."""
-    cd = CameraDriver(
-        list_of_markers_to_find,
-        default_kernel_size=55,
-        scaling_parameter=1000,
-        downscale_factor=1,
-    )  # Best in robolab.
-    # cd = ImageDriver(list_of_markers_to_find, defaultKernelSize = 21)
-    t0 = time()
-
-    while cd.running and stop_flag is False:
-        (t1, t0) = (t0, time())
-        if print_debug_messages is True:
-            print("time for one iteration: %f" % (t0 - t1))
-        cd.get_image()
-        cd.process_frame()
-        cd.draw_detected_markers()
-        cd.show_processed_frame()
-        cd.handle_keyboard_events()
-        y = cd.return_positions()
-        for k in range(len(y)):
+    def determine_marker_orientation(self, frame: np.ndarray, marker_location: Sequence[int]) -> float:
+        (xm, ym) = marker_location
+        real_value = self.frame_real[ym, xm]
+        imag_value = self.frame_imag[ym, xm]
+        orientation = (math.atan2(-real_value, imag_value) - math.pi / 2) / self.order
+        max_value = 0
+        max_orientation = orientation
+        search_distance = self.kernel_size / 3
+        for k in range(self.order):
+            orient = orientation + 2 * k * math.pi / self.order
+            xm2 = int(xm + search_distance * math.cos(orient))
+            ym2 = int(ym + search_distance * math.sin(orient))
             try:
-                # pose_corrected = perspective_corrector.convertPose(y[k])
-                pose_corrected = y[k]
-                print(
-                    f"{pose_corrected.x:8.3f} {pose_corrected.y:8.3f} {pose_corrected.theta:8.3f} {pose_corrected.quality:8.3f} {pose_corrected.order}"
-                )
+                intensity = frame[ym2, xm2]
+                if intensity > max_value:
+                    max_value = intensity
+                    max_orientation = orient
+            except IndexError:
+                pass
             except Exception as e:
-                print(e)
+                traceback.print_exception(e)
+                pass
+        return self.limit_angle_to_range(max_orientation)
 
-    print("Stopping")
+    @staticmethod
+    def limit_angle_to_range(angle: float) -> float:
+        while angle < math.pi:
+            angle += 2 * math.pi
+        while angle > math.pi:
+            angle -= 2 * math.pi
+        return angle
+
+    def determine_marker_quality(self, frame: np.ndarray, marker_location: Sequence[int], orientation: float) -> float:
+        (bright_regions, dark_regions) = self.generate_template_for_quality_estimator(orientation)
+        try:
+            frame_img = self.extract_window_around_maker_location(frame, marker_location)
+            if frame_img.shape != bright_regions.shape or frame_img.shape != dark_regions.shape:
+                return 0.0
+            (bright_mean, bright_std) = cv2.meanStdDev(frame_img, mask=bright_regions)
+            (dark_mean, dark_std) = cv2.meanStdDev(frame_img, mask=dark_regions)
+            mean_difference = np.squeeze(bright_mean - dark_mean)
+            normalized_mean_difference = np.squeeze(mean_difference / (0.5 * bright_std + 0.5 * dark_std))
+            # Ugly hack for translating the normalized_mean_differences to the range [0, 1]
+            temp_value_for_quality = 1 - 1 / (1 + math.exp(0.75 * (-7 + normalized_mean_difference)))
+            return temp_value_for_quality
+        except Exception as e:
+            traceback.print_exception(e)
+            return 0.0
+
+    def extract_window_around_maker_location(self, frame: np.ndarray, marker_location: Sequence[int]) -> np.ndarray:
+        xm, ym = marker_location
+        frame_tmp = np.array(frame[ym - self.y1 : ym + self.y2, xm - self.x1 : xm + self.x2])
+        frame_img = frame_tmp.astype(np.uint8)
+        return frame_img
+
+    def generate_template_for_quality_estimator(self, orientation: float) -> tuple[np.ndarray, np.ndarray]:
+        phase = np.exp((self.limit_angle_to_range(-orientation)) * 1j)
+        angle_threshold = 3.14 / (2 * self.order)
+        t3 = np.angle(self.KernelRemoveArmComplex * phase) < angle_threshold
+        t4 = np.angle(self.KernelRemoveArmComplex * phase) > -angle_threshold
+        signed_mask = 1 - 2 * (t3 & t4)
+        adjusted_kernel = self.kernelComplex * np.power(phase, self.order)
+        if self.track_marker_with_missing_black_leg:
+            adjusted_kernel *= signed_mask
+        bright_regions = (adjusted_kernel.real < -self.threshold).astype(np.uint8)
+        dark_regions = (adjusted_kernel.real > self.threshold).astype(np.uint8)
+        return bright_regions, dark_regions

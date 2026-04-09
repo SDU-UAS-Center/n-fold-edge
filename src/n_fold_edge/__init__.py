@@ -1,4 +1,4 @@
-from .MarkerLocator import main as ML_main
+from .MarkerTracker import main as ML_main
 
 
 def main() -> None:
