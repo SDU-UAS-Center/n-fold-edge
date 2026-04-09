@@ -1,9 +1,14 @@
+"""Main file for N-fold-edge."""
+
 import math
 import os
 import signal
+from collections.abc import Iterable
 from time import strftime, time
+from typing import Any
 
 import cv2
+import numpy as np
 
 from .MarkerPose import MarkerPose
 from .MarkerTracker import MarkerTracker
@@ -19,7 +24,8 @@ stop_flag = False
 
 
 # define ctrl-c handler
-def signal_handler(signal, frame):
+def signal_handler(signal: int, frame: Any) -> None:
+    """Handle signal to terminate program."""
     global stop_flag
     stop_flag = True
 
@@ -28,7 +34,8 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-def set_camera_focus():
+def set_camera_focus() -> None:
+    """Set Camera Focus."""
     # Disable autofocus
     os.system("v4l2-ctl -d 1 -c focus_auto=0")
 
@@ -42,17 +49,17 @@ def set_camera_focus():
 
 class CameraDriver:
     """
-    Purpose: capture images from a camera and delegate procesing of the
+    Purpose: capture images from a camera and delegate processing of the
     images to a different class.
     """
 
     def __init__(
         self,
-        marker_orders=[6],
-        default_kernel_size=21,
-        scaling_parameter=2500,
-        downscale_factor=1,
-    ):
+        marker_orders: Iterable[int] = (6,),
+        default_kernel_size: int = 21,
+        scaling_parameter: float = 2500,
+        downscale_factor: float = 1,
+    ) -> None:
         # Initialize camera driver.
         # Open output window.
         if show_image is True:
@@ -64,32 +71,32 @@ class CameraDriver:
         self.set_camera_resolution()
 
         # Storage for image processing.
-        self.current_frame = None
-        self.processed_frame = None
+        self.current_frame: np.ndarray
+        self.processed_frame: np.ndarray
         self.running = True
         self.downscale_factor = downscale_factor
 
         # Storage for trackers.
-        self.trackers = []
-        self.old_locations = []
+        self.trackers: list[MarkerTracker] = []
+        self.old_locations: list[MarkerPose] = []
 
         # Initialize trackers.
         for marker_order in marker_orders:
             temp = MarkerTracker(marker_order, default_kernel_size, scaling_parameter)
             temp.track_marker_with_missing_black_leg = False
             self.trackers.append(temp)
-            self.old_locations.append(MarkerPose(None, None, None, None, None))
+            self.old_locations.append(MarkerPose(0, 0, 0, 0, 0))
 
-    def set_camera_resolution(self):
+    def set_camera_resolution(self) -> None:
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
-    def get_image(self):
+    def get_image(self) -> None:
         # Get image from camera.
-        for k in range(get_images_to_flush_cam_buffer):
+        for _ in range(get_images_to_flush_cam_buffer):
             self.current_frame = self.camera.read()[1]
 
-    def process_frame(self):
+    def process_frame(self) -> None:
         self.processed_frame = self.current_frame
         # Locate all markers in image.
         frame_gray = cv2.cvtColor(self.current_frame, cv2.COLOR_RGB2GRAY)
@@ -101,34 +108,34 @@ class CameraDriver:
         )
         for k in range(len(self.trackers)):
             # Previous marker location is unknown, search in the entire image.
-            self.current_frame = self.trackers[k].locate_marker(reduced_image)
-            self.old_locations[k] = self.trackers[k].pose
+            self.old_locations[k] = self.trackers[k].locate_marker(reduced_image)
             self.old_locations[k].scale_position(self.downscale_factor)
 
-    def draw_detected_markers(self):
-        for k in range(len(self.trackers)):
-            xm = int(self.old_locations[k].x)
-            ym = int(self.old_locations[k].y)
-            orientation = self.old_locations[k].theta
-            if self.old_locations[k].quality < 0.9:
-                cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 1)
-            else:
-                cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 3)
+    def draw_detected_markers(self) -> None:
+        if self.processed_frame is not None:
+            for k in range(len(self.trackers)):
+                xm = int(self.old_locations[k].x)
+                ym = int(self.old_locations[k].y)
+                orientation = self.old_locations[k].theta
+                if self.old_locations[k].quality < 0.9:
+                    cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 1)
+                else:
+                    cv2.circle(self.processed_frame, (xm, ym), 4, (55, 55, 255), 3)
 
-            xm2 = int(xm + 50 * math.cos(orientation))
-            ym2 = int(ym + 50 * math.sin(orientation))
-            cv2.line(self.processed_frame, (xm, ym), (xm2, ym2), (255, 0, 0), 2)
+                xm2 = int(xm + 50 * math.cos(orientation))
+                ym2 = int(ym + 50 * math.sin(orientation))
+                cv2.line(self.processed_frame, (xm, ym), (xm2, ym2), (255, 0, 0), 2)
 
-    def show_processed_frame(self):
-        if show_image is True:
+    def show_processed_frame(self) -> None:
+        if show_image is True and self.processed_frame is not None:
             cv2.imshow("filterdemo", self.processed_frame)
 
-    def reset_all_locations(self):
+    def reset_all_locations(self) -> None:
         # Reset all markers locations, forcing a full search on the next iteration.
         for k in range(len(self.trackers)):
-            self.old_locations[k] = MarkerPose(None, None, None, None, None)
+            self.old_locations[k] = MarkerPose(0, 0, 0, 0, 0)
 
-    def handle_keyboard_events(self):
+    def handle_keyboard_events(self) -> None:
         if show_image is True:
             # Listen for keyboard events and take relevant actions.
             key = cv2.waitKey(100)
@@ -143,14 +150,16 @@ class CameraDriver:
                 # save image
                 print("Saving image")
                 filename = strftime("%Y-%m-%d %H-%M-%S")
-                cv2.imwrite("output/%s.png" % filename, self.current_frame)
+                if self.current_frame is not None:
+                    cv2.imwrite(f"output/{filename}.png", self.current_frame)
 
-    def return_positions(self):
+    def return_positions(self) -> list[MarkerPose]:
         # Return list of all marker locations.
         return self.old_locations
 
 
-def main():
+def main() -> None:
+    """Main function for running n-fold-edge on video."""
     cd = CameraDriver(
         list_of_markers_to_find,
         default_kernel_size=55,
@@ -175,16 +184,9 @@ def main():
                 # pose_corrected = perspective_corrector.convertPose(y[k])
                 pose_corrected = y[k]
                 print(
-                    "%8.3f %8.3f %8.3f %8.3f %s"
-                    % (
-                        pose_corrected.x,
-                        pose_corrected.y,
-                        pose_corrected.theta,
-                        pose_corrected.quality,
-                        pose_corrected.order,
-                    )
+                    f"{pose_corrected.x:8.3f} {pose_corrected.y:8.3f} {pose_corrected.theta:8.3f} {pose_corrected.quality:8.3f} {pose_corrected.order}"
                 )
             except Exception as e:
-                print("%s" % e)
+                print(e)
 
     print("Stopping")

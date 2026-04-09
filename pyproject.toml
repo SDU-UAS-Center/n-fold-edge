@@ -26,6 +26,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "icecream>=2.2.0",
+    "mypy>=1.20.0",
     "pre-commit>=4.5.1",
 ]
 
@@ -90,3 +91,23 @@ convention = "numpy"
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.mypy]
+files = "*.py"
+exclude = [
+    "/documentation/",
+    "/patterns/",
+]
+disable_error_code = "import-untyped"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+extra_checks = true
+check_untyped_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_any_generics = false
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
