@@ -32,8 +32,6 @@ class MarkerLocator:
         self.y2 = int(math.ceil(float(self.kernel_size) / 2))
         self.x1 = int(math.floor(float(self.kernel_size) / 2))
         self.x2 = int(math.ceil(float(self.kernel_size) / 2))
-        # Information about the located marker.
-        self.pose: MarkerPose
 
     @staticmethod
     def generate_symmetry_detector_kernel(order: int, kernel_size: int) -> tuple[np.ndarray, np.ndarray]:
@@ -92,8 +90,7 @@ class MarkerLocator:
         quality = self.determine_marker_quality(frame, max_loc, orientation)
         dx, dy = self.refine_marker_location(max_loc)
         marker_location = (max_loc[0] + dx, max_loc[1] + dy)
-        self.pose = MarkerPose(marker_location[0], marker_location[1], orientation, quality, self.order)
-        return self.pose
+        return MarkerPose(marker_location[0], marker_location[1], orientation, quality, self.order)
 
     def determine_marker_orientation(self, frame: np.ndarray, marker_location: Sequence[int]) -> float:
         (xm, ym) = marker_location
