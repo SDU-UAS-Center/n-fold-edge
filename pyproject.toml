@@ -29,6 +29,12 @@ dev = [
     "icecream>=2.2.0",
     "mypy>=1.20.0",
     "pre-commit>=4.5.1",
+    "sphinx<9",
+    "myst_parser",
+    "furo",
+    "sphinx_copybutton",
+    "sphinx_reredirects",
+    "sphinx-argparse",
 ]
 
 [tool.codespell]
