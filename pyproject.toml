@@ -17,7 +17,8 @@ dependencies = [
 ]
 
 [project.scripts]
-n-fold-edge = "n_fold_edge:main"
+locate-markers = "n_fold_edge.__main__:locate_markers"
+track-markers = "n_fold_edge.__main__:track_markers"
 
 [build-system]
 requires = ["uv_build>=0.8.10,<0.9.0"]
