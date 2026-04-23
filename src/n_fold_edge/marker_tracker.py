@@ -11,8 +11,8 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .MarkerLocator import MarkerLocator
-from .MarkerPose import MarkerPose
+from .marker_locator import MarkerLocator
+from .marker_pose import MarkerPose
 
 
 class MarkerTracker:

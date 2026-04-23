@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import cv2
 import numpy as np
 
-from .MarkerPose import MarkerPose
+from .marker_pose import MarkerPose
 
 
 class MarkerLocator:
