@@ -1,6 +1,7 @@
 """CLI for running marker locator and tracker."""
 
 import argparse
+import csv
 from pathlib import Path
 
 import cv2
@@ -24,7 +25,7 @@ def get_track_markers_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "video", type=video_type, help="Video on which to track markers. Or an id to capture video from."
     )
-    parser.add_argument("--order", type=int, nargs="*", default=5, help="Order of Markers to Track.")
+    parser.add_argument("--order", type=int, nargs="*", default=[5], help="Order of Markers to Track.")
     parser.add_argument("--kernel-size", type=int, default=55, help="Kernel size to use for marker location")
     parser.add_argument("--scale-factor", type=float, default=1000, help="Scale factor to scale video by.")
     parser.add_argument("-o", "--output", type=Path, help="Location to csv file with marker location for each frame.")
@@ -46,10 +47,13 @@ def get_locate_markers_arg_parse() -> argparse.ArgumentParser:
     """Get arg parser for locate markers."""
     parser = argparse.ArgumentParser("locate-markers", description="Locate Markers in image.")
     parser.add_argument("image", type=Path, help="Image on which to locate markers. Or folder with images.")
-    parser.add_argument("--order", type=int, nargs="*", default=5, help="Order of Markers to locate.")
+    parser.add_argument("--order", type=int, nargs="*", default=[5], help="Order of Markers to locate.")
     parser.add_argument("--kernel-size", type=int, default=55, help="Kernel size to use for marker location")
     parser.add_argument("--scale-factor", type=float, default=1000, help="Scale factor to scale image by.")
-    parser.add_argument("-o", "--output", type=Path, help="Location to save image with markers drawn on.")
+    parser.add_argument(
+        "-o", "--output", type=Path, help="Location to save csv file with marker location for each image."
+    )
+    parser.add_argument("--output-image", type=Path, help="Location to save image with markers drawn on.")
     return parser
 
 
@@ -64,9 +68,15 @@ def locate_markers() -> None:
         image_files.extend(args.image.glob("**/*.jpeg"))
     else:
         image_files = [args.image]
-    if len(image_files) > 1 and not args.output.is_dir():
+    if len(image_files) > 1 and not args.output_image.is_dir():
         print("When input is multiple images output must be a directory!")
         return
+    if args.output is not None:
+        if args.output.exists():
+            raise FileExistsError("csv file already exist. Choose another filename.")
+        with open(args.output, "a") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["Image", "x", "y", "direction", "quality", "order"])
     for image_file in image_files:
         image = cv2.imread(image_file)
         if image is None:
@@ -78,6 +88,10 @@ def locate_markers() -> None:
             marker_pose = ml.locate_marker(gray_image)
             print(marker_pose)
             if args.output is not None:
+                with open(args.output, "a") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow([image_file] + marker_pose.as_list())
+            if args.output_image is not None:
                 xm = int(marker_pose.x)
                 ym = int(marker_pose.y)
                 orientation = marker_pose.theta
@@ -88,9 +102,9 @@ def locate_markers() -> None:
                 xm2 = int(xm + 50 * np.cos(orientation))
                 ym2 = int(ym + 50 * np.sin(orientation))
                 cv2.line(image, (xm, ym), (xm2, ym2), (255, 0, 0), 2)
-        if args.output is not None:
-            if args.output.is_dir():
-                out_file = args.output.joinpath(image_file.name)
+        if args.output_image is not None:
+            if args.output_image.is_dir():
+                out_file = args.output_image.joinpath(image_file.name)
             else:
-                out_file = args.output
+                out_file = args.output_image
             cv2.imwrite(out_file, image)
