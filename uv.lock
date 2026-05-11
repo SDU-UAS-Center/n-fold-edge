@@ -487,7 +487,6 @@ wheels = [
 
 [[package]]
 name = "n-fold-edge"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "opencv-python" },
