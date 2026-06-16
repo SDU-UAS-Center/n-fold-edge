@@ -1,5 +1,5 @@
-Tutorial locate marker
-=====================
+Locate marker
+=============
 
 In this tutorial we will show how *n-fold-edge* CLI can be used to locate a marker in an image.
 

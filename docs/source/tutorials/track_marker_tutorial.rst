@@ -1,5 +1,5 @@
-Tutorial track marker
-=====================
+Track marker
+============
 
 In this tutorial we will show how *n-fold-edge* CLI can be used to track a marker with a webcam.
 
