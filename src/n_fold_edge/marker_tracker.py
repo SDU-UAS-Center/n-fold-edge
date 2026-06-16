@@ -1,4 +1,4 @@
-"""Main file for N-fold-edge."""
+"""Track markers in video."""
 
 import csv
 import math
@@ -11,12 +11,21 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .marker_locator import MarkerLocator
-from .marker_pose import MarkerPose
+from n_fold_edge.marker_locator import MarkerLocator
+from n_fold_edge.marker_pose import MarkerPose
 
 
 class MarkerTracker:
-    """Track markers in video file or video stream."""
+    """
+    Track markers in video file or video stream.
+
+    Parameters
+    ----------
+    marker_locators : MarkerLocator | Sequence[MarkerLocator]
+        One or more MarkerLocator instances for the markers to track.
+    show_video : bool
+        Whether to show the video as the markers are being tracked.
+    """
 
     def __init__(self, marker_locators: MarkerLocator | Sequence[MarkerLocator], show_video: bool = False) -> None:
         if isinstance(marker_locators, Sequence):
@@ -25,12 +34,12 @@ class MarkerTracker:
             self.marker_locators = (marker_locators,)
         self.show_video = show_video
         self.stop_flag = False
-        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
 
-    def signal_handler(self, signal: int, frame: Any) -> None:
+    def _signal_handler(self, signal: int, frame: Any) -> None:
         self.stop_flag = True
 
-    def handle_keyboard_events(self, frame: np.ndarray) -> bool:
+    def _handle_keyboard_events(self, frame: np.ndarray) -> bool:
         if self.stop_flag:
             return True
         if self.show_video is True:
@@ -47,7 +56,7 @@ class MarkerTracker:
                 cv2.imwrite(f"output/{filename}.png", frame)
         return False
 
-    def draw_detected_markers(self, frame: np.ndarray, marker_pose: MarkerPose) -> np.ndarray:
+    def _draw_detected_markers(self, frame: np.ndarray, marker_pose: MarkerPose) -> np.ndarray:
         xm = int(marker_pose.x)
         ym = int(marker_pose.y)
         orientation = marker_pose.theta
@@ -60,24 +69,36 @@ class MarkerTracker:
         cv2.line(frame, (xm, ym), (xm2, ym2), (255, 0, 0), 2)
         return frame
 
-    def prepare_csv_file(self, csv_file_path: Path) -> None:
+    def _prepare_csv_file(self, csv_file_path: Path) -> None:
         if csv_file_path.exists():
             raise FileExistsError("csv file already exist. Choose another filename.")
         with open(csv_file_path, "a") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(["Frame", "x", "y", "direction", "quality", "order"])
 
-    def save_marker_to_csv(self, csv_file_path: Path, marker_pose: MarkerPose, frame_number: float) -> None:
+    def _save_marker_to_csv(self, csv_file_path: Path, marker_pose: MarkerPose, frame_number: float) -> None:
         with open(csv_file_path, "a") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow([frame_number] + marker_pose.as_list())
 
     def track(self, video: Path | int, save_video_path: Path | None = None, save_csv_path: Path | None = None) -> None:
+        """
+        Start tracking of markers in video.
+
+        Parameters
+        ----------
+        video : Path | int
+            Path to a video or a id if webcam is used.
+        save_video_path : Path | None
+            Path to save video with detected markers drawn on if desired.
+        save_csv_path : Path |  None
+            Path to save found marker location in csv format if desired.
+        """
         cap = cv2.VideoCapture(video)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         if save_csv_path is not None:
-            self.prepare_csv_file(save_csv_path)
+            self._prepare_csv_file(save_csv_path)
         if save_video_path is not None:
             if isinstance(video, int):
                 fourcc = cv2.VideoWriter.fourcc(*"DIVX")
@@ -103,17 +124,17 @@ class MarkerTracker:
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
             for ml in self.marker_locators:
                 marker_pose = ml.locate_marker(frame_gray)
-                frame = self.draw_detected_markers(frame, marker_pose)
+                frame = self._draw_detected_markers(frame, marker_pose)
                 if save_csv_path is not None:
                     frame_number = cap.get(cv2.CAP_PROP_POS_FRAMES)
                     if frame_number < 0:
                         frame_number = internal_frame_number
-                    self.save_marker_to_csv(save_csv_path, marker_pose, frame_number)
+                    self._save_marker_to_csv(save_csv_path, marker_pose, frame_number)
             if self.show_video:
                 cv2.imshow("Marker Tracker", frame)
             if video_out is not None:
                 video_out.write(frame)
-            stop = self.handle_keyboard_events(frame)
+            stop = self._handle_keyboard_events(frame)
             if stop:
                 break
             internal_frame_number += 1

@@ -7,23 +7,34 @@ from collections.abc import Sequence
 import cv2
 import numpy as np
 
-from .marker_pose import MarkerPose
+from n_fold_edge.marker_pose import MarkerPose
 
 
 class MarkerLocator:
-    """Purpose: Locate a certain marker in an image."""
+    """
+    Locate a marker in an image.
 
-    def __init__(self, order: int, kernel_size: int, scale_factor: float) -> None:
+    Parameters
+    ----------
+    order : int
+        The order type of the marker to locate.
+    kernel_size : int
+        Kernel size to use for detecting the marker.
+    scale_factor : float
+        Scale factor to use for detecting the marker.
+    """
+
+    def __init__(self, order: int, kernel_size: int = 55, scale_factor: float = 1000) -> None:
         self.order = order
         self.kernel_size = kernel_size
-        (kernel_real, kernel_imag) = self.generate_symmetry_detector_kernel(order, kernel_size)
+        (kernel_real, kernel_imag) = self._generate_symmetry_detector_kernel(order, kernel_size)
         self.mat_real = kernel_real / scale_factor
         self.mat_imag = kernel_imag / scale_factor
         self.frame_real: np.ndarray
         self.frame_imag: np.ndarray
         self.track_marker_with_missing_black_leg = True
         # Create kernel used to remove arm in quality-measure
-        (kernel_remove_arm_real, kernel_remove_arm_imag) = self.generate_symmetry_detector_kernel(1, self.kernel_size)
+        (kernel_remove_arm_real, kernel_remove_arm_imag) = self._generate_symmetry_detector_kernel(1, self.kernel_size)
         self.kernelComplex = np.array(kernel_real + 1j * kernel_imag, dtype=complex)
         self.KernelRemoveArmComplex = np.array(kernel_remove_arm_real + 1j * kernel_remove_arm_imag, dtype=complex)
         # Values used in quality-measure
@@ -34,7 +45,7 @@ class MarkerLocator:
         self.x2 = int(math.ceil(float(self.kernel_size) / 2))
 
     @staticmethod
-    def generate_symmetry_detector_kernel(order: int, kernel_size: int) -> tuple[np.ndarray, np.ndarray]:
+    def _generate_symmetry_detector_kernel(order: int, kernel_size: int) -> tuple[np.ndarray, np.ndarray]:
         value_range = np.linspace(-1, 1, kernel_size)
         temp1 = np.meshgrid(value_range, value_range)
         kernel = temp1[0] + 1j * temp1[1]
@@ -43,7 +54,7 @@ class MarkerLocator:
         kernel = kernel * np.exp(-8 * magnitude**2)
         return np.real(kernel), np.imag(kernel)
 
-    def refine_marker_location(self, marker_location: Sequence[int]) -> tuple[float, float]:
+    def _refine_marker_location(self, marker_location: Sequence[int]) -> tuple[float, float]:
         try:
             delta = 1
             # Fit a parabola to the frame_sum_squared marker response
@@ -111,13 +122,13 @@ class MarkerLocator:
         """
         self.frame_sum_squared = self.apply_convolution_with_complex_kernel(frame)
         _, _, _, max_loc = cv2.minMaxLoc(self.frame_sum_squared)
-        orientation = self.determine_marker_orientation(frame, max_loc)
-        quality = self.determine_marker_quality(frame, max_loc, orientation)
-        dx, dy = self.refine_marker_location(max_loc)
+        orientation = self._determine_marker_orientation(frame, max_loc)
+        quality = self._determine_marker_quality(frame, max_loc, orientation)
+        dx, dy = self._refine_marker_location(max_loc)
         marker_location = (max_loc[0] + dx, max_loc[1] + dy)
         return MarkerPose(marker_location[0], marker_location[1], orientation, quality, self.order)
 
-    def determine_marker_orientation(self, frame: np.ndarray, marker_location: Sequence[int]) -> float:
+    def _determine_marker_orientation(self, frame: np.ndarray, marker_location: Sequence[int]) -> float:
         (xm, ym) = marker_location
         real_value = self.frame_real[ym, xm]
         imag_value = self.frame_imag[ym, xm]
@@ -139,20 +150,20 @@ class MarkerLocator:
             except Exception as e:
                 traceback.print_exception(e)
                 pass
-        return self.limit_angle_to_range(max_orientation)
+        return self._limit_angle_to_range(max_orientation)
 
     @staticmethod
-    def limit_angle_to_range(angle: float) -> float:
+    def _limit_angle_to_range(angle: float) -> float:
         while angle < math.pi:
             angle += 2 * math.pi
         while angle > math.pi:
             angle -= 2 * math.pi
         return angle
 
-    def determine_marker_quality(self, frame: np.ndarray, marker_location: Sequence[int], orientation: float) -> float:
-        (bright_regions, dark_regions) = self.generate_template_for_quality_estimator(orientation)
+    def _determine_marker_quality(self, frame: np.ndarray, marker_location: Sequence[int], orientation: float) -> float:
+        (bright_regions, dark_regions) = self._generate_template_for_quality_estimator(orientation)
         try:
-            frame_img = self.extract_window_around_maker_location(frame, marker_location)
+            frame_img = self._extract_window_around_maker_location(frame, marker_location)
             if frame_img.shape != bright_regions.shape or frame_img.shape != dark_regions.shape:
                 return 0.0
             (bright_mean, bright_std) = cv2.meanStdDev(frame_img, mask=bright_regions)
@@ -166,14 +177,14 @@ class MarkerLocator:
             traceback.print_exception(e)
             return 0.0
 
-    def extract_window_around_maker_location(self, frame: np.ndarray, marker_location: Sequence[int]) -> np.ndarray:
+    def _extract_window_around_maker_location(self, frame: np.ndarray, marker_location: Sequence[int]) -> np.ndarray:
         xm, ym = marker_location
         frame_tmp = np.array(frame[ym - self.y1 : ym + self.y2, xm - self.x1 : xm + self.x2])
         frame_img = frame_tmp.astype(np.uint8)
         return frame_img
 
-    def generate_template_for_quality_estimator(self, orientation: float) -> tuple[np.ndarray, np.ndarray]:
-        phase = np.exp((self.limit_angle_to_range(-orientation)) * 1j)
+    def _generate_template_for_quality_estimator(self, orientation: float) -> tuple[np.ndarray, np.ndarray]:
+        phase = np.exp((self._limit_angle_to_range(-orientation)) * 1j)
         angle_threshold = 3.14 / (2 * self.order)
         t3 = np.angle(self.KernelRemoveArmComplex * phase) < angle_threshold
         t4 = np.angle(self.KernelRemoveArmComplex * phase) > -angle_threshold
