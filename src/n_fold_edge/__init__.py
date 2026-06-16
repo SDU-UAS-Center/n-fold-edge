@@ -4,4 +4,4 @@ from n_fold_edge.marker_pose import MarkerPose
 from n_fold_edge.marker_tracker import MarkerTracker
 
 # current version
-__version__ = "1.0.2"
+__version__ = "1.1.0"
