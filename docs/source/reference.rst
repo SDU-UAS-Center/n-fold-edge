@@ -9,3 +9,4 @@ Reference Manual
     marker_locator
     marker_tracker
     marker_pose
+    checkerboard
