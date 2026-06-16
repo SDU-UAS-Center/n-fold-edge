@@ -20,19 +20,19 @@ N-fold-edge is a python package and can be installed with pip, uv etc.
 pip install CDC
 ```
 
-For more advanced installation, please visit the [Documentation]() for more information.
+For more advanced installation, please visit the [Documentation](https://sdu-uas-center.github.io/n-fold-edge/) for more information.
 
 ## Usage
 
-When install n-fold-edge can be used as cli. See [CLI]() for more information.
+When install n-fold-edge can be used as cli. See [CLI](https://sdu-uas-center.github.io/n-fold-edge/CLI.html) for more information.
 
 ## Documentation
 
-For a full list of command line arguments see [CLI](). For a reference manual, please visit [Reference Manual]()
+For a full list of command line arguments see [CLI](https://sdu-uas-center.github.io/n-fold-edge/CLI.html). For a reference manual, please visit [Reference Manual](https://sdu-uas-center.github.io/n-fold-edge/reference.html)
 
 ## Contributing
 
-For contribution guidelines, please see the [Documentation]().
+For contribution guidelines, please see the [Documentation](https://sdu-uas-center.github.io/n-fold-edge/contributing.html).
 
 ## License
 
