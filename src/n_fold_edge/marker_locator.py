@@ -75,7 +75,20 @@ class MarkerLocator:
             # In that case the refine method bails out and returns two zeros.
             return 0, 0
 
-    def locate_marker(self, frame: np.ndarray) -> MarkerPose:
+    def apply_convolution_with_complex_kernel(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Get the response from applying the convolution of a complex kernel on an image.
+
+        Parameters
+        ----------
+        frame : ndarray
+            Image or frame of a marker.
+
+        Returns
+        -------
+        response : ndarray
+            Result of applying the convolution of a complex kernel.
+        """
         assert len(frame.shape) == 2, "Input image is not a single channel image."
         self.frame_real = frame.copy()
         self.frame_imag = frame.copy()
@@ -85,6 +98,18 @@ class MarkerLocator:
         frame_real_squared = cv2.multiply(self.frame_real, self.frame_real, dtype=cv2.CV_32F)
         frame_imag_squared = cv2.multiply(self.frame_imag, self.frame_imag, dtype=cv2.CV_32F)
         self.frame_sum_squared = cv2.add(frame_real_squared, frame_imag_squared, dtype=cv2.CV_32F)
+        return self.frame_sum_squared
+
+    def locate_marker(self, frame: np.ndarray) -> MarkerPose:
+        """
+        Locate the marker with in the frame.
+
+        Parameters
+        ----------
+        frame : ndarray
+            A frame or image with the marker to locate.
+        """
+        self.frame_sum_squared = self.apply_convolution_with_complex_kernel(frame)
         _, _, _, max_loc = cv2.minMaxLoc(self.frame_sum_squared)
         orientation = self.determine_marker_orientation(frame, max_loc)
         quality = self.determine_marker_quality(frame, max_loc, orientation)
